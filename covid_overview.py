@@ -54,19 +54,22 @@ def get_dates(df):
 def gen_data(region='Country/Region', filter_frame=lambda x: x, add_table=[], kpis_info=[]):
     col_region = region
     df = get_frame('Confirmed')
-    dft_cases = df.pipe(filter_frame)
-    dft_deaths = get_frame('Deaths').pipe(filter_frame)
-    dft_recovered = get_frame('Recovered').pipe(filter_frame)
+
     latest_date_idx, dt_cols = get_dates(df)
     dt_today = dt_cols[latest_date_idx]
-    dt_5ago = dt_cols[latest_date_idx - 5]
+    dt_ago = dt_cols[latest_date_idx - 1]
 
+    dft_cases = df.pipe(filter_frame)
     dfc_cases = dft_cases.groupby(col_region)[dt_today].sum()
+    dfp_cases = dft_cases.groupby(col_region)[dt_ago].sum()
+
+    dft_deaths = get_frame('Deaths').pipe(filter_frame)
     dfc_deaths = dft_deaths.groupby(col_region)[dt_today].sum()
+    dfp_deaths = dft_deaths.groupby(col_region)[dt_ago].sum()
+
+    dft_recovered = get_frame('Recovered').pipe(filter_frame)
     dfc_recovered = dft_recovered.groupby(col_region)[dt_today].sum()
-    dfp_cases = dft_cases.groupby(col_region)[dt_5ago].sum()
-    dfp_deaths = dft_deaths.groupby(col_region)[dt_5ago].sum()
-    dfp_recovered = dft_recovered.groupby(col_region)[dt_5ago].sum()
+    dfp_recovered = dft_recovered.groupby(col_region)[dt_ago].sum()
 
     df_table = (pd.DataFrame(dict(
         Cases=dfc_cases, Deaths=dfc_deaths, Recovered=dfc_recovered,
@@ -88,7 +91,7 @@ def gen_data(region='Country/Region', filter_frame=lambda x: x, add_table=[], kp
     s_kpis = pd.concat([
         kpi_of(x['title'], f'{x["prefix"]} ', x.get('pipe'))
         for x in kpis_info])
-    summary = {'updated': pd.to_datetime(dt_today), 'since': pd.to_datetime(dt_5ago)}
+    summary = {'updated': pd.to_datetime(dt_today), 'since': pd.to_datetime(dt_ago)}
     summary = {**summary, **df_table[metrics].sum(), **s_kpis}
     dft_ct_cases = dft_cases.groupby(col_region)[dt_cols].sum()
     dft_ct_new_cases = dft_ct_cases.diff(axis=1).fillna(0).astype(int)
