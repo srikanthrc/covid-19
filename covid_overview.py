@@ -63,7 +63,6 @@ def get_covidtracking_data(name):
 	df['Country/Region'] = "US"
 	df['Lat'] = "NaN"
 	df['Long'] = "NaN"
-	print(df.head(5))
 	return df
 
 
