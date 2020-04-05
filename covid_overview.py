@@ -1,7 +1,12 @@
+import csv
+import re
+import os
+import tempfile
+import requests
+import urllib3
 from datetime import datetime
-import pandas as pd
 import getpass
-
+import pandas as pd
 
 base_url = 'https://raw.githubusercontent.com/srikanthrc/covid-19/master/'
 base_url = '' if (getpass.getuser() == 'Pratap Vardhan') else base_url
@@ -11,6 +16,8 @@ paths = {
     'overview': base_url + 'overview.tpl'
 }
 
+csse_url = "https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data/csse_covid_19_daily_reports"
+csse_base_url = 'https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/'
 
 def get_mappings(url):
     df = pd.read_csv(url, encoding='utf-8')
@@ -59,7 +66,10 @@ def get_covidtracking_data(name):
 	# data = data.rename(columns={"state": "Province/State"})
 	data['Date'] = data['date'].apply(lambda x: datetime.strptime(str(x),'%Y%m%d').strftime("%m/%d/%y"))
 	data['Province/State'] = data['state'].replace(states['replace.state'])
-	df = data.pivot(index="Province/State", columns="Date", values=name)
+	if name == 'all':
+		df = data.pivot(index="Province/State", columns="Date", values=['positive','death'])
+	else:
+		df = data.pivot(index="Province/State", columns="Date", values=name)
 	df['Country/Region'] = "US"
 	df['Lat'] = "NaN"
 	df['Long'] = "NaN"
@@ -174,11 +184,151 @@ def states_data(region='Province/State', filter_frame=lambda x: x, add_table=[],
 		'dt_last': latest_date_idx, 'dt_cols': dt_cols}
 
 
-if __name__ == "__main__":
-	kpis_info = [
-		{'title': 'New York', 'prefix': 'NY'},
-		{'title': 'Washington', 'prefix': 'WA'},
-		{'title': 'California', 'prefix': 'CA'}]
+def get_county_data():
+	"""
+	Function responsible for collect the reports on github page and
+	extract the US county data from it. 
+	When a new file be created, this script will be able
+	to figure out, download and create a new output file including
+	the whole information.
+	"""
+	http = urllib3.PoolManager()
+	r = http.request('GET', csse_url)
+	links = re.findall('[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9].csv', str(r.data))
+	print("Link: {}".format(csse_url))
+	links = list(set(links))
+	links.sort()
 
-	data = states_data(kpis_info=kpis_info)
-	print(data['summary'])
+	final_list = [['FIPS','Admin2','Province_State','Country_Region',
+				   'Last_Update','Lat','Long',
+				   'Confirmed','Deaths','Recovered','Active','CombinedKey']]
+
+	for file_name in links:
+		print(file_name)
+
+		file_structure = ""
+		header = True
+
+		each_csv = requests.get(csse_base_url + file_name)
+
+		tmp_file = tempfile.NamedTemporaryFile(suffix=".csv")
+		temp_file = tmp_file.name
+		aux_file = tmp_file.name + ".aux"
+
+		open(temp_file, 'wb').write(each_csv.content)
+
+		with open(aux_file, "w") as stage_file:
+			for line in open(temp_file):
+				line = line.rstrip()
+				# print(line)
+				stage_file.write(line + '\n')
+			os.rename(aux_file, tmp_file.name)
+
+		with open(temp_file) as fp:
+			ref_file = csv.reader(fp)
+			for row in ref_file:
+				# print(file_structure,row)
+				if ((row[0] == "FIPS") or \
+				    (row[0] == "\ufeffFIPS")) and \
+				   (row[1] == "Admin2") and \
+				   (row[2] == "Province_State") and \
+				   (row[3] == "Country_Region") and \
+				   (row[4] == "Last_Update") and \
+				   (row[5] == "Lat") and \
+				   (row[6] == "Long_") and \
+				   (row[7] == "Confirmed") and \
+				   (row[8] == "Deaths") and \
+				   (row[9] == "Recovered") and \
+				   (row[10] == "Active") and \
+				   (row[11] == "Combined_Key"):
+					file_structure = "F01"
+					header = True
+				elif ((row[0] == "Province/State") or \
+					  (row[0] == "\ufeffProvince/State")) and \
+					 (row[1] == "Country/Region") and \
+					 (row[2] == "Last Update") and \
+					 (row[3] == "Confirmed") and \
+					 (row[4] == "Deaths") and \
+					 (row[5] == "Recovered") and \
+					 (len(row) == 6):
+					file_structure = "F02"
+					header = True
+				elif ((row[0] == "Province/State") or \
+					  (row[0] == "\ufeffProvince/State")) and \
+					 (row[1] == "Country/Region") and \
+					 (row[2] == "Last Update") and \
+					 (row[3] == "Confirmed") and \
+					 (row[4] == "Deaths") and \
+					 (row[5] == "Recovered") and \
+					 (row[6] == "Latitude") and \
+					 (row[7] == "Longitude"):
+					file_structure = "F03"
+					header = True
+				else:
+					header = False
+					if file_structure == 'F01' and not header:
+						row.insert(0, file_name.split(".")[0])
+						final_list.append(row)
+					elif file_structure == 'F02' and not header:
+						row.insert(0, file_name.split(".")[0])
+						row.insert(1, "")
+						row.insert(1, "")
+						row.insert(6, "")
+						row.insert(6, "")
+						row.insert(11, "")
+						row.insert(11, "")
+						final_list.append(row)
+					elif file_structure == 'F03' and not header:
+						aux = []
+						row.insert(0, file_name.split(".")[0])
+						row.insert(1, "")
+						row.insert(1, "")
+						row.insert(11, "")
+						row.insert(11, "")
+						aux.insert(0, row[0])
+						aux.insert(1, row[1])
+						aux.insert(2, row[2])
+						aux.insert(3, row[3])
+						aux.insert(4, row[4])
+						aux.insert(5, row[5])
+						aux.insert(6, row[9])
+						aux.insert(7, row[10])
+						aux.insert(8, row[6])
+						aux.insert(9, row[7])
+						aux.insert(10, row[8])
+						aux.insert(11, row[11])
+						aux.insert(12, row[12])
+						row = aux
+						final_list.append(row)
+					else:
+						print("CHECK NEW STRUCTURE {}".format(ref_file))
+		
+	out_file = tempfile.NamedTemporaryFile(suffix=".csv")
+	# out_file = "csse_timeseries.csv"
+	print("Saving to file: " + out_file.name)
+	with open(out_file.name, "w") as file_result:
+		csv_file = csv.writer(file_result)
+		for records in final_list:
+			csv_file.writerow(records)
+
+	data = pd.read_csv(out_file, encoding='utf-8')
+	data['Date'] = data.index
+	data['Date'] = data['Date'].apply(lambda x: datetime.strptime(str(x),'%m-%d-%Y').strftime("%m/%d/%y"))
+	data = data.set_index('Date')
+	return (data[data['Country_Region'].eq('US')])
+
+
+if __name__ == "__main__":
+	# kpis_info = [
+	# 	{'title': 'New York', 'prefix': 'NY'},
+	# 	{'title': 'Washington', 'prefix': 'WA'},
+	# 	{'title': 'California', 'prefix': 'CA'}]
+
+	# data = states_data(kpis_info=kpis_info)
+	# print(data['summary'])
+
+	# df = get_covidtracking_data('all')
+	# print(df)
+
+	data = get_county_data()
+	print(data)
