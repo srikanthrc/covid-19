@@ -141,7 +141,6 @@ def gen_country_data(region='Country/Region', filter_frame=lambda x: x, add_tabl
 		'dt_last': latest_date_idx, 'dt_cols': dt_cols}
 
 
-
 def gen_states_data(region='Province/State', filter_frame=lambda x: x, add_table=[], kpis_info=[]):
 	col_region = region
 	df = get_covidtracking_data('positive')
@@ -240,7 +239,7 @@ if __name__ == "__main__":
 	kpis_info = [
 		{'title': 'Asia', 'prefix': 'APAC'},
 		{'title': 'Europe', 'prefix': 'EU'},
-		{'title': 'NA', 'prefix': 'NA'}]
+		{'title': 'North America', 'prefix': 'NA'}]
 	data = gen_country_data(kpis_info=kpis_info)
 	print(data['summary'])
 
