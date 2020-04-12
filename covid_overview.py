@@ -46,13 +46,21 @@ def get_template(path):
     return open(path, encoding='utf8').read()
 
 
-def get_frame(name):
+def get_country_frame(name):
     url = (
         'https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/'
         f'csse_covid_19_time_series/time_series_19-covid-{name}.csv')
     df = pd.read_csv(url, encoding='utf-8')
     # rename countries
     df['Country/Region'] = df['Country/Region'].replace(mapping['replace.country'])
+    return df
+
+
+def get_state_frame(name):
+    url = (
+        'https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/'
+        f'csse_covid_19_time_series/time_series_covid19_{name}_US.csv')
+    df = pd.read_csv(url, encoding='utf-8')
     return df
 
 
@@ -87,9 +95,9 @@ def get_dates(df):
     return latest_date_idx, dt_cols
 
 
-def gen_data(region='Country/Region', filter_frame=lambda x: x, add_table=[], kpis_info=[]):
+def gen_country_data(region='Country/Region', filter_frame=lambda x: x, add_table=[], kpis_info=[]):
     col_region = region
-    df = get_frame('Confirmed')
+    df = get_country_frame('Confirmed')
 
     latest_date_idx, dt_cols = get_dates(df)
     dt_today = dt_cols[latest_date_idx]
@@ -99,31 +107,27 @@ def gen_data(region='Country/Region', filter_frame=lambda x: x, add_table=[], kp
     dfc_cases = dft_cases.groupby(col_region)[dt_today].sum()
     dfp_cases = dft_cases.groupby(col_region)[dt_ago].sum()
 
-    dft_deaths = get_frame('Deaths').pipe(filter_frame)
+    dft_deaths = get_country_frame('Deaths').pipe(filter_frame)
     dfc_deaths = dft_deaths.groupby(col_region)[dt_today].sum()
     dfp_deaths = dft_deaths.groupby(col_region)[dt_ago].sum()
 
-    dft_recovered = get_frame('Recovered').pipe(filter_frame)
-    dfc_recovered = dft_recovered.groupby(col_region)[dt_today].sum()
-    dfp_recovered = dft_recovered.groupby(col_region)[dt_ago].sum()
-
     df_table = (pd.DataFrame(dict(
-        Cases=dfc_cases, Deaths=dfc_deaths, Recovered=dfc_recovered,
-        PCases=dfp_cases, PDeaths=dfp_deaths, PRecovered=dfp_recovered))
+        Cases=dfc_cases, Deaths=dfc_deaths,
+        PCases=dfp_cases, PDeaths=dfp_deaths))
         .sort_values(by=['Cases', 'Deaths'], ascending=[False, False])
         .reset_index())
-    for c in 'Cases, Deaths, Recovered'.split(', '):
+    for c in 'Cases, Deaths'.split(', '):
         df_table[f'{c} (+)'] = (df_table[c] - df_table[f'P{c}']).clip(0)  # DATABUG
     df_table['Fatality Rate'] = (100 * df_table['Deaths'] / df_table['Cases']).round(1)
 
     for rule in add_table:
         df_table[rule['name']] = df_table.pipe(rule['apply'])
 
+    metrics = ['Cases', 'Deaths', 'Cases (+)', 'Deaths (+)']
     def kpi_of(name, prefix, pipe):
         df_f = df_table.pipe(pipe or (lambda x: x[x[col_region].eq(name)]))
         return df_f[metrics].sum().add_prefix(prefix)
 
-    metrics = ['Cases', 'Deaths', 'Recovered', 'Cases (+)', 'Deaths (+)', 'Recovered (+)']
     s_kpis = pd.concat([
         kpi_of(x['title'], f'{x["prefix"]} ', x.get('pipe'))
         for x in kpis_info])
@@ -137,7 +141,7 @@ def gen_data(region='Country/Region', filter_frame=lambda x: x, add_table=[], kp
 
 
 
-def states_data(region='Province/State', filter_frame=lambda x: x, add_table=[], kpis_info=[]):
+def gen_states_data(region='Province/State', filter_frame=lambda x: x, add_table=[], kpis_info=[]):
 	col_region = region
 	df = get_covidtracking_data('positive')
 
@@ -166,11 +170,11 @@ def states_data(region='Province/State', filter_frame=lambda x: x, add_table=[],
 	for rule in add_table:
 		df_table[rule['name']] = df_table.pipe(rule['apply'])
 
+	metrics = ['Cases', 'Deaths', 'Cases (+)', 'Deaths (+)']
 	def kpi_of(name, prefix, pipe):
 		df_f = df_table.pipe(pipe or (lambda x: x[x[col_region].eq(name)]))
 		return df_f[metrics].sum().add_prefix(prefix)
 
-	metrics = ['Cases', 'Deaths', 'Cases (+)', 'Deaths (+)']
 	s_kpis = pd.concat([
 		kpi_of(x['title'], f'{x["prefix"]} ', x.get('pipe'))
 		for x in kpis_info])
@@ -184,151 +188,67 @@ def states_data(region='Province/State', filter_frame=lambda x: x, add_table=[],
 		'dt_last': latest_date_idx, 'dt_cols': dt_cols}
 
 
-def get_county_data():
-	"""
-	Function responsible for collect the reports on github page and
-	extract the US county data from it. 
-	When a new file be created, this script will be able
-	to figure out, download and create a new output file including
-	the whole information.
-	"""
-	http = urllib3.PoolManager()
-	r = http.request('GET', csse_url)
-	links = re.findall('[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9].csv', str(r.data))
-	print("Link: {}".format(csse_url))
-	links = list(set(links))
-	links.sort()
+def gen_county_data(region='Admin2',filter_frame=lambda x: x, add_table=[], kpis_info=[]):
+	col_region = region
+	df = get_state_frame('confirmed')
 
-	final_list = [['FIPS','Admin2','Province_State','Country_Region',
-				   'Last_Update','Lat','Long',
-				   'Confirmed','Deaths','Recovered','Active','CombinedKey']]
+	latest_date_idx, dt_cols = get_dates(df)
+	dt_today = dt_cols[latest_date_idx]
+	dt_ago = dt_cols[latest_date_idx - 1]
 
-	for file_name in links:
-		print(file_name)
+	dft_cases = df.pipe(filter_frame)
+	dfc_cases = dft_cases.groupby(col_region)[dt_today].sum()
+	dfp_cases = dft_cases.groupby(col_region)[dt_ago].sum()
 
-		file_structure = ""
-		header = True
+	dft_deaths = get_state_frame('deaths').pipe(filter_frame)
+	dfc_deaths = dft_deaths.groupby(col_region)[dt_today].sum()
+	dfp_deaths = dft_deaths.groupby(col_region)[dt_ago].sum()
 
-		each_csv = requests.get(csse_base_url + file_name)
+	df_table = (pd.DataFrame(dict(
+		Cases=dfc_cases, Deaths=dfc_deaths,
+		PCases=dfp_cases, PDeaths=dfp_deaths))
+		.sort_values(by=['Cases', 'Deaths'], ascending=[False, False])
+		.reset_index())
 
-		tmp_file = tempfile.NamedTemporaryFile(suffix=".csv")
-		temp_file = tmp_file.name
-		aux_file = tmp_file.name + ".aux"
+	for c in 'Cases, Deaths'.split(', '):
+		df_table[f'{c} (+)'] = (df_table[c] - df_table[f'P{c}']).clip(0)  # DATABUG
+	df_table['Fatality Rate'] = (100 * df_table['Deaths'] / df_table['Cases']).round(1)
 
-		open(temp_file, 'wb').write(each_csv.content)
+	for rule in add_table:
+		df_table[rule['name']] = df_table.pipe(rule['apply'])
 
-		with open(aux_file, "w") as stage_file:
-			for line in open(temp_file):
-				line = line.rstrip()
-				# print(line)
-				stage_file.write(line + '\n')
-			os.rename(aux_file, tmp_file.name)
+	metrics = ['Cases', 'Deaths', 'Cases (+)', 'Deaths (+)']
+	def kpi_of(name, prefix, pipe):
+		df_f = df_table.pipe(pipe or (lambda x: x[x[col_region].eq(name)]))
+		return df_f[metrics].sum().add_prefix(prefix)
 
-		with open(temp_file) as fp:
-			ref_file = csv.reader(fp)
-			for row in ref_file:
-				# print(file_structure,row)
-				if ((row[0] == "FIPS") or \
-				    (row[0] == "\ufeffFIPS")) and \
-				   (row[1] == "Admin2") and \
-				   (row[2] == "Province_State") and \
-				   (row[3] == "Country_Region") and \
-				   (row[4] == "Last_Update") and \
-				   (row[5] == "Lat") and \
-				   (row[6] == "Long_") and \
-				   (row[7] == "Confirmed") and \
-				   (row[8] == "Deaths") and \
-				   (row[9] == "Recovered") and \
-				   (row[10] == "Active") and \
-				   (row[11] == "Combined_Key"):
-					file_structure = "F01"
-					header = True
-				elif ((row[0] == "Province/State") or \
-					  (row[0] == "\ufeffProvince/State")) and \
-					 (row[1] == "Country/Region") and \
-					 (row[2] == "Last Update") and \
-					 (row[3] == "Confirmed") and \
-					 (row[4] == "Deaths") and \
-					 (row[5] == "Recovered") and \
-					 (len(row) == 6):
-					file_structure = "F02"
-					header = True
-				elif ((row[0] == "Province/State") or \
-					  (row[0] == "\ufeffProvince/State")) and \
-					 (row[1] == "Country/Region") and \
-					 (row[2] == "Last Update") and \
-					 (row[3] == "Confirmed") and \
-					 (row[4] == "Deaths") and \
-					 (row[5] == "Recovered") and \
-					 (row[6] == "Latitude") and \
-					 (row[7] == "Longitude"):
-					file_structure = "F03"
-					header = True
-				else:
-					header = False
-					if file_structure == 'F01' and not header:
-						row.insert(0, file_name.split(".")[0])
-						final_list.append(row)
-					elif file_structure == 'F02' and not header:
-						row.insert(0, file_name.split(".")[0])
-						row.insert(1, "")
-						row.insert(1, "")
-						row.insert(6, "")
-						row.insert(6, "")
-						row.insert(11, "")
-						row.insert(11, "")
-						final_list.append(row)
-					elif file_structure == 'F03' and not header:
-						aux = []
-						row.insert(0, file_name.split(".")[0])
-						row.insert(1, "")
-						row.insert(1, "")
-						row.insert(11, "")
-						row.insert(11, "")
-						aux.insert(0, row[0])
-						aux.insert(1, row[1])
-						aux.insert(2, row[2])
-						aux.insert(3, row[3])
-						aux.insert(4, row[4])
-						aux.insert(5, row[5])
-						aux.insert(6, row[9])
-						aux.insert(7, row[10])
-						aux.insert(8, row[6])
-						aux.insert(9, row[7])
-						aux.insert(10, row[8])
-						aux.insert(11, row[11])
-						aux.insert(12, row[12])
-						row = aux
-						final_list.append(row)
-					else:
-						print("CHECK NEW STRUCTURE {}".format(ref_file))
-		
-	out_file = tempfile.NamedTemporaryFile(suffix=".csv")
-	# out_file = "csse_timeseries.csv"
-	print("Saving to file: " + out_file.name)
-	with open(out_file.name, "w") as file_result:
-		csv_file = csv.writer(file_result)
-		for records in final_list:
-			csv_file.writerow(records)
+	s_kpis = pd.concat([
+		kpi_of(x['title'], f'{x["prefix"]} ', x.get('pipe'))
+		for x in kpis_info])
 
-	data = pd.read_csv(out_file, encoding='utf-8')
-	data['Date'] = data.index
-	data['Date'] = data['Date'].apply(lambda x: datetime.strptime(str(x),'%m-%d-%Y').strftime("%m/%d/%y"))
-	data = data.set_index('Date')
-	return (data[data['Country_Region'].eq('US')])
+	summary = {'updated': pd.to_datetime(dt_today), 'since': pd.to_datetime(dt_ago)}
+	summary = {**summary, **df_table[metrics].sum(), **s_kpis}
+	dft_ct_cases = dft_cases.groupby(col_region)[dt_cols].sum()
+	dft_ct_new_cases = dft_ct_cases.diff(axis=1).fillna(0).astype(int)
+	return {
+		'summary': summary, 'table': df_table, 'newcases': dft_ct_new_cases,
+		'dt_last': latest_date_idx, 'dt_cols': dt_cols}
 
 
 if __name__ == "__main__":
-	# kpis_info = [
-	# 	{'title': 'New York', 'prefix': 'NY'},
-	# 	{'title': 'Washington', 'prefix': 'WA'},
-	# 	{'title': 'California', 'prefix': 'CA'}]
-
-	# data = states_data(kpis_info=kpis_info)
-	# print(data['summary'])
+	kpis_info = [
+		{'title': 'New York', 'prefix': 'NY'},
+		{'title': 'Washington', 'prefix': 'WA'},
+		{'title': 'California', 'prefix': 'CA'}]
+	data = gen_states_data(kpis_info=kpis_info)
+	print(data['summary'])
 
 	# df = get_covidtracking_data('all')
 	# print(df)
 
-	data = get_county_data()
-	print(data)
+	kpis_info = [
+		{'title': 'New York', 'prefix': 'NYC'},
+		{'title': 'Westchester', 'prefix': 'WCN'},
+		{'title': 'San Mateo', 'prefix': 'SMC'}]
+	data = gen_county_data(kpis_info=kpis_info)
+	print(data['summary'])
