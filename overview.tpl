@@ -38,12 +38,12 @@
 {% macro narrative() -%}
 {% if KPI_CASE == 'World' %}
   In the last <b>{{ lastdays }} days</b>, <b class="color-neg">{{ '{0:,.0f}'.format(D['Cases (+)']) }}</b> new Coronavirus cases have been reported worldwide.
-  Of which <b class="color-neg">{{ '{0:,.0f}'.format(D['EU Cases (+)']) }}</b> ({{ "{0:.0%}".format(D['EU Cases (+)'] / D['Cases (+)']) }}) are from <b>Europe</b>.
-  <b>North America</b> has reported <b class="color-neg">{{ '{0:,.0f}'.format(D['NA Cases (+)']) }}</b> new cases in the last {{ lastdays }} days.
+  Of which <b class="color-neg">{{ '{0:,.0f}'.format(D['NA Cases (+)']) }}</b> ({{ "{0:.0%}".format(D['NA Cases (+)'] / D['Cases (+)']) }}) are from <b>North America</b>.
+  <b>Europe</b> has reported <b class="color-neg">{{ '{0:,.0f}'.format(D['EU Cases (+)']) }}</b> new cases in the last {{ lastdays }} days.
 {% elif KPI_CASE == 'US' %}
   In the last <b>{{ lastdays }} days</b>, <b class="color-neg">{{ '{0:,.0f}'.format(D['Cases (+)']) }}</b> new Coronavirus cases have been reported in the US.
   Of which <b class="color-neg">{{ '{0:,.0f}'.format(D['NY Cases (+)']) }}</b> ({{ "{0:.0%}".format(D['NY Cases (+)'] / D['Cases (+)']) }}) are from <b>New York</b> State.
-  <b>Washington</b> has reported <b class="color-neg">{{ '{0:,.0f}'.format(D['WA Cases (+)']) }}</b> new cases in the last {{ lastdays }} days.
+  <b>California</b> has reported <b class="color-neg">{{ '{0:,.0f}'.format(D['CA Cases (+)']) }}</b> new cases in the last {{ lastdays }} days.
 {% elif KPI_CASE == 'Europe' %}
   In the last <b>{{ lastdays }} days</b>, <b class="color-neg">{{ '{0:,.0f}'.format(D['Cases (+)']) }}</b> new Coronavirus cases have been reported in the Europe.
   Of which <b class="color-neg">{{ '{0:,.0f}'.format(D['IT Cases (+)']) }}</b> ({{ "{0:.0%}".format(D['IT Cases (+)'] / D['Cases (+)']) }}) are from <b>Italy</b>.
