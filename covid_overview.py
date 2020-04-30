@@ -66,7 +66,7 @@ def get_state_frame(name):
 
 def get_covidtracking_data(name):
 	url = (
-	    'https://covidtracking.com/api/states/'
+	    'https://covidtracking.com/api/v1/states/'
 		f'daily.csv')
 	data = pd.read_csv(url, encoding='utf-8')
 	# convert to JHU format
